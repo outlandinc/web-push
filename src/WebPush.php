@@ -20,6 +20,7 @@ use Buzz\Message\Response;
 class WebPush
 {
     const GCM_URL = 'https://android.googleapis.com/gcm/send';
+    const FCM_URL = 'https://fcm.googleapis.com/fcm/send';
 
     /** @var Browser */
     protected $browser;
@@ -33,6 +34,7 @@ class WebPush
     /** @var array Array of not standard endpoint sources */
     private $urlByServerType = array(
         'GCM' => self::GCM_URL,
+        'FCM' => self::FCM_URL
     );
 
     /** @var array Default options : TTL, urgency, topic */
@@ -125,10 +127,12 @@ class WebPush
             return false;
         }
 
-        // if GCM is present, we should check for the API key
-        if (array_key_exists('GCM', $this->notificationsByServerType)) {
-            if (empty($this->apiKeys['GCM'])) {
-                throw new \ErrorException('No GCM API Key specified.');
+        // if GCM or FCM is present, we should check for the API key
+        foreach ($this->notificationsByServerType as $type => $notification) {
+            if ($type == 'GCM' || $type == 'FCM') {
+                if (empty($this->apiKeys[$type])) {
+                    throw new \ErrorException('No '.$type.' API Key specified.');
+                }
             }
         }
 
@@ -219,8 +223,8 @@ class WebPush
                 $headers['Topic'] = $options['topic'];
             }
 
-            if ($serverType === 'GCM') {
-                $headers['Authorization'] = 'key='.$this->apiKeys['GCM'];
+            if ($serverType === 'GCM' || $serverType == 'FCM') {
+                $headers['Authorization'] = 'key='.$this->apiKeys[$serverType];
             }
 
             $responses[] = $this->sendRequest($endpoint, $headers, $content);
