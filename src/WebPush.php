@@ -46,6 +46,9 @@ class WebPush
     /** @var boolean */
     private $nativePayloadEncryptionSupport;
 
+    /** @var bool Return response no matter success or fail */
+    private $returnResponse;
+
     /**
      * WebPush constructor.
      *
@@ -57,12 +60,13 @@ class WebPush
     public function __construct(array $apiKeys = array(), $defaultOptions = array(), $timeout = 30, AbstractClient $client = null)
     {
         $this->apiKeys = $apiKeys;
+        $this->returnResponse = false;
         $this->setDefaultOptions($defaultOptions);
 
         $client = isset($client) ? $client : new MultiCurl();
         $client->setTimeout($timeout);
         $this->browser = new Browser($client);
-        
+
         $this->nativePayloadEncryptionSupport = version_compare(phpversion(), '7.1', '>=');
     }
 
@@ -81,7 +85,7 @@ class WebPush
      */
     public function sendNotification($endpoint, $payload = null, $userPublicKey = null, $userAuthToken = null, $flush = false, $options = array())
     {
-        if(isset($payload)) {
+        if(isset($payload) && isset($userPublicKey) && isset($userAuthToken)) {
             if (strlen($payload) > Encryption::MAX_PAYLOAD_LENGTH) {
                 throw new \ErrorException('Size of payload must not be greater than '.Encryption::MAX_PAYLOAD_LENGTH.' octets.');
             }
@@ -172,6 +176,9 @@ class WebPush
             } else {
                 $return[] = array(
                     'success' => true,
+                    'statusCode' => $response->getStatusCode(),
+                    'headers' => $response->getHeaders(),
+                    'content' => $response->getContent()
                 );
             }
         }
@@ -179,7 +186,7 @@ class WebPush
         // reset queue
         $this->notificationsByServerType = null;
 
-        return $completeSuccess ? true : $return;
+        return (!$this->returnResponse && $completeSuccess) ? true : $return;
     }
 
     private function prepareAndSend(array $notifications, $serverType)
@@ -205,7 +212,16 @@ class WebPush
                 );
 
                 $content = $encrypted['cipherText'];
-            } else {
+            }
+            else if (isset($payload)) {
+                $headers = array(
+                    'Content-Length' => strlen($payload),
+                    'Content-Type' => 'application/json'
+                );
+
+                $content = $payload;
+            }
+            else {
                 $headers = array(
                     'Content-Length' => 0,
                 );
@@ -323,5 +339,10 @@ class WebPush
         $this->defaultOptions['TTL'] = array_key_exists('TTL', $defaultOptions) ? $defaultOptions['TTL'] : 2419200;
         $this->defaultOptions['urgency'] = array_key_exists('urgency', $defaultOptions) ? $defaultOptions['urgency'] : null;
         $this->defaultOptions['topic'] = array_key_exists('topic', $defaultOptions) ? $defaultOptions['topic'] : null;
+    }
+
+    public function setReturnResponse($returnResponse)
+    {
+        $this->returnResponse = $returnResponse;
     }
 }
